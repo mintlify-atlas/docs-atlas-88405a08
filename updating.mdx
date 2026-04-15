@@ -1,0 +1,135 @@
+---
+title: "Keep your dotfiles and packages up to date"
+description: "Pull the latest dotfiles with git pull — the post-merge hook automatically re-applies stow links and runs pkg sync so your system stays in sync."
+---
+
+Keeping your system current is a straightforward two-step process: pull the latest dotfiles, then re-apply stow and sync packages. The README notes that packages and stow links are refreshed automatically via a `post-merge` git hook — you can set that up yourself with the pattern shown below, or run the steps manually after each pull.
+
+## Updating with git pull
+
+From inside your dotfiles directory, run:
+
+```bash
+cd ~/dotfiles && git pull
+```
+
+After the pull completes, re-apply stow and sync packages to pick up any changes:
+
+```bash
+stow --no-folding -R base
+stow --no-folding -R pkg
+pkg sync
+```
+
+Because both `stow` and `pkg sync` are idempotent, re-running them on an already up-to-date system is always safe.
+
+## Automating updates with a post-merge hook
+
+To have git run these steps automatically after every successful pull, install a `post-merge` hook:
+
+```bash
+mkdir -p ~/dotfiles/.git/hooks
+cat > ~/dotfiles/.git/hooks/post-merge << 'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cd ~/dotfiles
+stow --no-folding -R base
+stow --no-folding -R pkg
+pkg sync
+EOF
+chmod +x ~/dotfiles/.git/hooks/post-merge
+```
+
+<Note>
+The `post-merge` hook only fires when `git pull` actually merges new commits. If your local branch is already up to date, the hook does not run.
+</Note>
+
+## Manually re-syncing
+
+If you need to re-apply stow or sync packages outside of a `git pull`, run the commands directly:
+
+<CodeGroup>
+```bash Re-apply stow
+cd ~/dotfiles
+stow --no-folding -R base
+stow --no-folding -R pkg
+# add other packages as needed
+stow --no-folding -R niri
+stow --no-folding -R screensaver
+```
+
+```bash Re-sync packages
+pkg sync
+```
+
+```bash Preview before syncing
+pkg diff
+```
+</CodeGroup>
+
+<Tip>
+Use `pkg diff` first to see which packages would be installed or are no longer in your config before committing to a sync.
+</Tip>
+
+## Adding new packages to your config
+
+To add a package to your declared setup:
+
+<Steps>
+  <Step title="Open the appropriate group file">
+    Find the right TOML file in `~/.config/pkg/packages/` for the backend you want to use:
+
+    ```bash
+    $EDITOR ~/.config/pkg/packages/base.toml
+    ```
+  </Step>
+
+  <Step title="Add the package name">
+    Append the package to the correct backend section:
+
+    ```toml
+    [pacman]
+    packages = [
+      "existing-package",
+      "your-new-package",
+    ]
+    ```
+
+    For AUR packages, add them under `[paru]`. For Flatpak apps, use `[flatpak]`.
+  </Step>
+
+  <Step title="Preview the change">
+    Check what `pkg sync` would do before running it:
+
+    ```bash
+    pkg diff
+    ```
+  </Step>
+
+  <Step title="Install">
+    ```bash
+    pkg sync
+    ```
+  </Step>
+</Steps>
+
+## Removing packages from your config
+
+To stop managing a package through `pkg`:
+
+1. Delete the package entry from the TOML group file
+2. Run `pkg diff` to confirm it appears in the "not in config anymore" section
+3. Run `pkg prune` to interactively remove it from the system
+
+<Warning>
+`pkg prune` only removes packages that `pkg` itself installed and tracks in its database. Packages you installed manually outside of `pkg` are never touched.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="rocket" href="/installation">
+    Set up dotfiles on a fresh system from scratch
+  </Card>
+  <Card title="pkg workflows" icon="arrow-right-arrow-left" href="/pkg/workflows">
+    Common pkg patterns for syncing and pruning packages
+  </Card>
+</CardGroup>

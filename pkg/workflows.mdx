@@ -1,0 +1,287 @@
+---
+title: "Common pkg workflows and patterns"
+description: "Real-world workflows for fresh installs, adding packages, pruning, partial syncs, system health checks, dotfiles version control, and multiple profiles."
+---
+
+These workflows cover the most common day-to-day operations with `pkg`. Every command shown here is real — run these exactly as written.
+
+---
+
+## Fresh Arch install from scratch
+
+On a brand new Arch (or CachyOS) system, start with only `python` and `git` available.
+
+<Steps>
+  <Step title="Install pkg itself">
+    Copy the `pkg` script to your local bin and make it executable:
+
+    ```bash
+    install -Dm755 pkg ~/.local/bin/pkg
+    ```
+
+    Ensure `~/.local/bin` is on your `PATH` (it is by default on most Arch setups).
+  </Step>
+  <Step title="Generate default config">
+    ```bash
+    pkg init
+    ```
+
+    This creates `~/.config/pkg/backends.toml`, example package groups, and example hook scripts. Nothing is installed yet.
+  </Step>
+  <Step title="Customize your package groups">
+    Open the generated files and declare what you want:
+
+    ```bash
+    $EDITOR ~/.config/pkg/backends.toml
+    $EDITOR ~/.config/pkg/packages/base.toml
+    $EDITOR ~/.config/pkg/packages/flatpak.toml
+    ```
+  </Step>
+  <Step title="Preview before touching anything">
+    ```bash
+    pkg diff
+    ```
+
+    This shows exactly what will be installed. No changes are made to your system.
+  </Step>
+  <Step title="Install everything">
+    ```bash
+    pkg sync
+    ```
+
+    `pkg` bootstraps any missing backends automatically — including building `paru` from AUR if it is not in your distro's official repos — then installs all packages in priority order.
+  </Step>
+</Steps>
+
+<Note>
+  On CachyOS, `paru` is in the official repos so `pkg` installs it with `pacman -S paru`. On stock Arch, `pkg` runs `bootstrap-paru.sh` instead, which clones the AUR PKGBUILD and builds it with `makepkg -si --noconfirm`. You do not need to do anything differently — the two-strategy bootstrap handles this automatically.
+</Note>
+
+---
+
+## Adding a new package
+
+<Steps>
+  <Step title="Open the appropriate group file">
+    ```bash
+    $EDITOR ~/.config/pkg/packages/base.toml
+    ```
+  </Step>
+  <Step title="Add the package name to the right backend section">
+    ```toml
+    [paru]
+    packages = [
+      "fastfetch",
+      "btop",
+      "eza",       # ← add here
+    ]
+    ```
+  </Step>
+  <Step title="Preview the change">
+    ```bash
+    pkg diff base
+    ```
+
+    Output:
+    ```
+    Package diff [base]
+
+      Will install:
+      + [paru] eza
+    ```
+  </Step>
+  <Step title="Install">
+    ```bash
+    pkg sync base
+    ```
+
+    Only the `base` group is processed, so the sync is fast.
+  </Step>
+</Steps>
+
+---
+
+## Removing a package
+
+<Steps>
+  <Step title="Delete the line from the group file">
+    ```bash
+    $EDITOR ~/.config/pkg/packages/base.toml
+    ```
+
+    Remove the package name from the `packages` list.
+  </Step>
+  <Step title="Confirm it appears as a candidate for removal">
+    ```bash
+    pkg diff
+    ```
+
+    The package appears under "Not in config anymore (run prune to remove)".
+  </Step>
+  <Step title="Interactively remove it">
+    ```bash
+    pkg prune
+    ```
+
+    `pkg` lists each orphaned package and asks before removing:
+
+    ```
+      Remove [paru] eza? [y/N] y
+      ✓ [paru] eza removed
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  `pkg prune` only removes packages that `pkg` itself installed. It will never touch packages you installed manually outside of `pkg`.
+</Warning>
+
+---
+
+## Syncing only part of your config
+
+You can scope any `sync`, `diff`, or `prune` operation to specific groups using positional arguments or `--exclude`.
+
+```bash
+# Install only the niri group
+pkg sync niri
+
+# Install everything except flatpak
+pkg sync --exclude flatpak
+
+# Install base and base_apps, skipping everything else
+pkg sync base base_apps
+
+# Preview only the flatpak group
+pkg diff flatpak
+
+# Check for orphans in base only
+pkg prune base
+
+# Everything except kde
+pkg prune --exclude kde
+```
+
+Group names are the file stems of your `packages/*.toml` files. Run `pkg groups` to see all available names with their priorities.
+
+---
+
+## Re-installing a manually removed package
+
+If you remove a package directly with `pacman` or `paru` without touching your TOML config, just run `pkg sync`:
+
+```bash
+pkg sync
+```
+
+`pkg` queries the live system on every sync — it does not rely solely on its database. A manually removed package will appear as missing and be reinstalled automatically.
+
+---
+
+## Checking system health
+
+```bash
+# Backend availability, install progress per group, hook scripts, paths
+pkg status
+
+# All tracked packages grouped by backend
+pkg list
+```
+
+`pkg status` is the best first command to run when something seems wrong. It shows which backends are available, how many packages in each group are actually installed vs. what the database records, and whether your hook scripts are executable.
+
+---
+
+## Version control: keeping config in your dotfiles repo
+
+Because the entire `~/.config/pkg/` directory is plain text TOML files and shell scripts, you can track it in your dotfiles repo.
+
+<CodeGroup>
+
+```bash ln -s approach
+cd ~/dotfiles
+ln -s ~/.config/pkg pkg
+git add pkg/
+git commit -m "add pkg config"
+```
+
+```bash stow approach
+# If your dotfiles use GNU Stow, the pkg stow package is already
+# set up in this repo — just stow it:
+stow --no-folding -R pkg
+```
+
+</CodeGroup>
+
+On a new machine: clone your dotfiles, symlink or stow the config directory, then run `pkg sync`.
+
+---
+
+## Backend bootstrap: paru on CachyOS vs stock Arch
+
+The `paru` backend uses a two-strategy bootstrap that handles both distros transparently:
+
+```toml
+# from backends.toml
+[backends.paru]
+install_self_try    = ["sudo", "pacman", "-S", "--noconfirm", "--needed", "paru"]
+install_self_script = "bootstrap-paru.sh"
+```
+
+When `paru` is missing, `pkg` runs through the strategies in order:
+
+<Steps>
+  <Step title="Try pacman -S paru">
+    On CachyOS, `paru` is in the official repos. `pacman -S paru` succeeds and `pkg` stops here.
+  </Step>
+  <Step title="Fall back to bootstrap-paru.sh">
+    On stock Arch, `pacman -S paru` exits non-zero because `paru` is AUR-only. `pkg` then runs:
+
+    ```bash
+    #!/usr/bin/env bash
+    # ~/.config/pkg/scripts/bootstrap-paru.sh
+    set -euo pipefail
+
+    echo "[pkg bootstrap] Building paru from AUR..."
+
+    tmpdir=$(mktemp -d)
+    trap 'rm -rf "$tmpdir"' EXIT
+
+    git clone --depth=1 https://aur.archlinux.org/paru.git "$tmpdir"
+    cd "$tmpdir"
+    makepkg -si --noconfirm
+
+    echo "[pkg bootstrap] paru installed successfully"
+    ```
+
+    This builds `paru` from the AUR using only `base-devel`, which is always available on Arch.
+  </Step>
+</Steps>
+
+You do not need to choose a strategy manually. The same `backends.toml` works on both distros.
+
+---
+
+## Using multiple profiles via `PKG_CONFIG_DIR`
+
+You can maintain entirely separate package sets by pointing `PKG_CONFIG_DIR` at different directories:
+
+```bash
+# Sync a minimal server profile
+PKG_CONFIG_DIR=~/.config/pkg-server pkg sync
+
+# Sync the full workstation profile (default)
+pkg sync
+```
+
+Each profile directory has its own `backends.toml` and `packages/` directory. The data directory (`~/.local/share/pkg/installed.db`) is shared by default; override it with `PKG_DATA_DIR` if you want separate databases:
+
+```bash
+PKG_CONFIG_DIR=~/.config/pkg-server \
+PKG_DATA_DIR=~/.local/share/pkg-server \
+pkg sync
+```
+
+<Tip>
+  Use group priority to express dependencies between groups. If the `uv` tool itself is declared in the `base` group (priority 10), and you have a separate `python-tools` group that uses the `uv` backend (priority 20), `base` always runs first, so `uv` is available when `python-tools` needs it.
+</Tip>

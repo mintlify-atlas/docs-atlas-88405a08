@@ -1,0 +1,64 @@
+---
+title: "vapenyk dotfiles: CachyOS/Arch Linux setup"
+description: "A declarative, stow-based dotfiles setup for CachyOS/Arch Linux with niri compositor, DMS shell, and the pkg package manager wrapper."
+---
+
+A minimal, opinionated Linux desktop built on CachyOS — managed entirely through version-controlled configuration files. These dotfiles wire together the niri Wayland compositor, the DankMaterialShell (DMS) desktop environment, a custom declarative package manager (`pkg`), and a curated shell setup into a reproducible, one-command install.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="rocket" href="/installation">
+    Clone, stow, and sync packages on a fresh CachyOS system in minutes
+  </Card>
+  <Card title="pkg — Package Manager" icon="box" href="/pkg/overview">
+    Declarative TOML-based wrapper for pacman, paru, flatpak, and uv
+  </Card>
+  <Card title="Niri & DMS" icon="window" href="/niri/overview">
+    Tiling Wayland compositor with DankMaterialShell integration
+  </Card>
+  <Card title="Shell & Tools" icon="terminal" href="/shell/bash-setup">
+    Modular bash setup, screensaver, and utility scripts
+  </Card>
+</CardGroup>
+
+## What's included
+
+These dotfiles are organized into four GNU Stow packages, each managing a distinct layer of the system:
+
+| Package | Contents |
+|---------|----------|
+| `base` | Shell config, ghostty terminal, wireplumber audio |
+| `niri` | Niri compositor config, DMS integration, GTK theme |
+| `pkg` | The `pkg` binary and its TOML config files |
+| `screensaver` | Terminal screensaver with systemd integration |
+
+## Key features
+
+<AccordionGroup>
+  <Accordion title="Declarative package management with pkg">
+    `pkg` is a single Python file that reads TOML config and keeps your system in sync across pacman, paru, flatpak, and uv — no manual installs, idempotent by design.
+  </Accordion>
+  <Accordion title="Niri tiling compositor">
+    niri is a scrollable-tiling Wayland compositor with a clean KDL config split into focused modules: animation, input, keybinds, layout, and window rules.
+  </Accordion>
+  <Accordion title="DMS (DankMaterialShell)">
+    A quickshell-based desktop shell providing app launcher, clipboard manager, notification center, power menu, lock screen, and media controls — all driven by `Mod+*` keybinds.
+  </Accordion>
+  <Accordion title="Automatic backend bootstrapping">
+    When `pkg sync` encounters a missing backend (paru, flatpak, uv), it installs it automatically before proceeding — including building paru from AUR if needed.
+  </Accordion>
+</AccordionGroup>
+
+<Steps>
+  <Step title="Install dependencies">
+    Install `stow` and `git` via pacman, then clone the repo
+  </Step>
+  <Step title="Apply dotfiles">
+    Use `stow --no-folding -R` to symlink each package into your home directory
+  </Step>
+  <Step title="Sync packages">
+    Run `pkg sync` to install all declared packages across every backend
+  </Step>
+  <Step title="Reload your shell">
+    Source your bashrc or start a new session to pick up all shell customizations
+  </Step>
+</Steps>

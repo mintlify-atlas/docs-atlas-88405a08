@@ -1,0 +1,80 @@
+---
+title: "Niri compositor: scrollable tiling on Wayland"
+description: "Overview of the niri scrollable-tiling Wayland compositor, its modular KDL config structure, DMS shell integration, and environment variable setup."
+---
+
+Niri is a scrollable-tiling Wayland compositor. Instead of a fixed grid, windows are arranged in columns that extend horizontally — you scroll left and right through them rather than juggling a fixed layout. This dotfiles setup pairs niri with DankMaterialShell (DMS), a quickshell-based desktop shell, to form a complete Wayland desktop environment on top of CachyOS.
+
+## Config architecture
+
+The entry point is a single `config.kdl` file that includes seven modular files from the `cfg/` directory, followed by eight optional DMS override files:
+
+```kdl
+include "./cfg/animation.kdl"
+include "./cfg/autostart.kdl"
+include "./cfg/input.kdl"
+include "./cfg/keybinds.kdl"
+include "./cfg/layout.kdl"
+include "./cfg/misc.kdl"
+include "./cfg/rules.kdl"
+
+// DMS overrides — only loaded when DMS is installed
+include optional=true "dms/alttab.kdl"
+include optional=true "dms/binds.kdl"
+include optional=true "dms/colors.kdl"
+include optional=true "dms/cursor.kdl"
+include optional=true "dms/layout.kdl"
+include optional=true "dms/outputs.kdl"
+include optional=true "dms/windowrules.kdl"
+include optional=true "dms/wpblur.kdl"
+```
+
+The `optional=true` flag silently skips a file when it doesn't exist, so the config stays valid whether or not DMS is installed.
+
+<Warning>
+  The `optional=true` parameter is a **niri-git** feature. The stable `niri` package from the official repositories does not support it. You must install `niri-git` from the AUR for this config to work.
+</Warning>
+
+## Config modules
+
+| File | What it controls |
+|------|-----------------|
+| `cfg/animation.kdl` | Spring and easing curves for workspace switches, window open/close, resizes, and overview |
+| `cfg/autostart.kdl` | Applications launched at startup (currently empty — DMS handles its own autostart) |
+| `cfg/input.kdl` | Keyboard layout (`us`, `ru`, `ua` with Caps Lock to switch), touchpad tap/scroll/click, mouse acceleration |
+| `cfg/keybinds.kdl` | All keyboard shortcuts for applications, DMS panels, window management, and workspaces |
+| `cfg/layout.kdl` | Window gaps, preset column widths, and background color |
+| `cfg/misc.kdl` | Environment variables, cursor behavior, `prefer-no-csd`, debug flags, and the DMS layer rule |
+| `cfg/rules.kdl` | Window and layer rules (corner radius, fullscreen for screensaver, wallpaper backdrop) |
+
+## DMS optional includes
+
+When DMS is installed, it writes its own KDL files into `~/.config/niri/dms/`. Niri loads them automatically at startup because of the `optional=true` includes in `config.kdl`. This pattern lets DMS inject its own colors, output configuration, wallpaper blur settings, and additional keybindings without modifying the base config files.
+
+## Environment variables
+
+`cfg/misc.kdl` sets these environment variables for every process launched by niri:
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `ELECTRON_OZONE_PLATFORM_HINT` | `auto` | Enables native Wayland for Electron apps |
+| `QT_QPA_PLATFORM` | `wayland` | Forces Qt apps to use Wayland |
+| `QT_QPA_PLATFORMTHEME` | `qt6ct` | Applies the qt6ct theme to Qt5 apps |
+| `QT_QPA_PLATFORMTHEME_QT6` | `qt6ct` | Applies the qt6ct theme to Qt6 apps |
+| `QT_WAYLAND_DISABLE_WINDOWDECORATION` | `1` | Strips client-side decorations from Qt windows |
+| `XDG_CURRENT_DESKTOP` | `niri` | Identifies the desktop environment |
+| `XDG_SESSION_TYPE` | `wayland` | Declares the session type |
+
+## Explore this section
+
+<CardGroup cols={2}>
+  <Card title="Keybindings reference" icon="keyboard" href="/niri/keybindings">
+    Full list of keyboard shortcuts organized by category.
+  </Card>
+  <Card title="Window layout & display" icon="layout-grid" href="/niri/layout">
+    Gap sizes, column widths, struts, window rules, and animations.
+  </Card>
+  <Card title="DMS integration" icon="layers" href="/niri/dms-integration">
+    How DankMaterialShell hooks into niri via optional includes and IPC.
+  </Card>
+</CardGroup>

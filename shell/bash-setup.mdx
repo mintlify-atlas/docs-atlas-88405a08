@@ -1,0 +1,137 @@
+---
+title: "Modular bash setup with ~/.bashrc.d"
+description: "How the dotfiles configure bash with a modular ~/.bashrc.d/ loader, covering PATH setup, history, readline bindings, aliases, starship, mise, fzf, and rbw."
+---
+
+The shell configuration uses a modular `~/.bashrc.d/` pattern: instead of one monolithic `~/.bashrc`, a small loader block sources every file in `~/.bashrc.d/` in alphabetical order. The main config file is `99-custom.sh`, which sets up PATH, history, key bindings, aliases, and integrations for starship, mise, and fzf.
+
+## How the loader works
+
+The `install-bashrc-d.sh` script appends a loader block to `~/.bashrc` (and `~/.zshrc` if zsh is installed). The block is idempotent — it skips if already present:
+
+```bash ~/.bashrc (loader block)
+# Load custom scripts from ~/.bashrc.d
+if [ -d "$HOME/.bashrc.d" ]; then
+    for _rc in "$HOME"/.bashrc.d/*; do
+        [ -f "$_rc" ] && . "$_rc"
+    done
+    unset _rc
+fi
+```
+
+Files in `~/.bashrc.d/` are sourced in filename order, so prefix numbers control load order. The included file is `99-custom.sh`.
+
+## PATH setup
+
+Four directories are prepended to `PATH` only when they exist and aren't already present:
+
+```bash
+_path_prepend "$HOME/.local/bin"   # user binaries (pkg, screensaver, etc.)
+_path_prepend "$HOME/bin"
+_path_prepend "$HOME/.cargo/bin"   # Rust tools
+_path_prepend "$HOME/go/bin"       # Go tools
+```
+
+## Tool integrations
+
+### Starship prompt
+
+[Starship](https://starship.rs) is initialized on every interactive shell. The guard checks `STARSHIP_SHELL` so it won't double-initialize on systems that source starship via `/etc/profile.d/`:
+
+```bash
+if command -v starship &>/dev/null; then
+    eval "$(starship init bash)"
+fi
+```
+
+### mise runtime manager
+
+[mise](https://mise.jdx.dev) activates on every shell to register `_mise_hook` into `PROMPT_COMMAND`, which keeps runtime PATH entries accurate as you `cd` between projects:
+
+```bash
+if command -v mise &>/dev/null; then
+    eval "$(mise activate bash)"
+fi
+```
+
+### fzf
+
+[fzf](https://github.com/junegunn/fzf) is initialized when available, enabling three built-in bindings:
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+T` | File picker — insert selected path into command line |
+| `Alt+C` | `cd` into selected directory |
+| `Ctrl+R` | Interactive history search |
+
+```bash
+if command -v fzf &>/dev/null; then
+    eval "$(fzf --bash)"
+fi
+```
+
+### rbw SSH agent
+
+[rbw](https://github.com/doy/rbw) (a Bitwarden CLI) exposes an SSH agent socket. The `SSH_AUTH_SOCK` is pointed at it so `ssh` and `git` use keys stored in Bitwarden:
+
+```bash
+export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/rbw/ssh-agent-socket"
+```
+
+## History settings
+
+Large history with sensible deduplication:
+
+| Setting | Value | Effect |
+|---------|-------|--------|
+| `HISTSIZE` | 50000 | Lines kept in memory |
+| `HISTFILESIZE` | 50000 | Lines kept on disk |
+| `HISTCONTROL` | `ignoreboth` | Skip duplicates and lines starting with space |
+| `histappend` | on | Append to history file instead of overwriting |
+| `checkwinsize` | on | Update `LINES`/`COLUMNS` after each command |
+| `globstar` | on | Enable `**` recursive glob |
+| `cdspell` | on | Auto-correct minor typos in `cd` arguments |
+
+## Key bindings
+
+Four readline bindings for word-level navigation:
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+Right` | Jump word forward |
+| `Ctrl+Left` | Jump word backward |
+| `Ctrl+Backspace` | Delete word backward |
+| `Ctrl+Delete` | Delete word forward |
+
+## Aliases
+
+| Alias | Expands to |
+|-------|-----------|
+| `yay` | `paru` |
+| `zj` | `zellij` |
+| `ll` | `ls -lh` |
+| `la` | `ls -lAh` |
+| `lt` | `ls -lRh` |
+| `l` | `ls -CF` |
+
+## Functions
+
+```bash
+mkcd() { mkdir -p "$1" && cd "$1"; }
+```
+
+`mkcd` creates a directory and immediately `cd`s into it — useful when creating new project directories.
+
+## Adding your own scripts
+
+Drop any `.sh` file into `~/.bashrc.d/` and it will be sourced automatically on the next shell start. Use a numeric prefix to control load order relative to `99-custom.sh`:
+
+```bash
+# ~/.bashrc.d/10-work.sh
+export WORK_ENV=staging
+alias deploy='./scripts/deploy.sh'
+```
+
+<Tip>
+Files are sourced in alphabetical order. Prefix with a number (e.g. `10-`, `50-`, `99-`) to control when your script runs relative to others.
+</Tip>

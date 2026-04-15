@@ -1,0 +1,113 @@
+---
+title: "Terminal screensaver with terminaltexteffects"
+description: "How the screensaver script works: launching via foot, dynamic refresh-rate detection, focus-aware exit, and customizing the ASCII logo."
+---
+
+The screensaver is a bash script that opens a fullscreen `foot` terminal window and runs looping ASCII art animations from [terminaltexteffects](https://github.com/ChrisBuilds/terminaltexteffects) (`tte`). It detects your monitor's refresh rate automatically, exits cleanly on any keypress or focus loss, and restores the cursor on exit.
+
+## How it works
+
+Running `screensaver` (or pressing `Mod+Alt+S` in niri) triggers a two-phase launch:
+
+<Steps>
+  <Step title="Launch a foot window">
+    The script calls `exec foot --app-id=org.screensaver --fullscreen -- screensaver --run` to open a dedicated fullscreen terminal. The `app-id` lets niri window rules identify it.
+  </Step>
+  <Step title="Run the effect loop">
+    Inside that terminal, the `--run` branch sets the background to black, hides the cursor, then loops: run a random `tte` effect, wait for input or focus loss, restart.
+  </Step>
+</Steps>
+
+## Refresh rate detection
+
+The script queries the live refresh rate so `tte` renders at the correct frame rate:
+
+```bash
+# Try wlr-randr first (niri/sway/wlroots)
+FRAME_RATE=$(wlr-randr 2>/dev/null | grep -oP '\d+(?=\.\d+ Hz \(.*current.*\))' | head -1)
+# Fall back to kscreen-doctor (KDE)
+if [ -z "$FRAME_RATE" ]; then
+    FRAME_RATE=$(kscreen-doctor -o 2>/dev/null | grep -oP '(?<=@)\d+(?=[\.\d]*\*)' | head -1)
+fi
+FRAME_RATE=${FRAME_RATE:-60}   # default 60 Hz if detection fails
+```
+
+## Focus-aware exit
+
+The screensaver exits as soon as focus moves away — no need to press a key. Detection is compositor-aware:
+
+```bash
+screensaver_in_focus() {
+    if pgrep -x niri >/dev/null 2>&1; then
+        niri msg focused-window 2>/dev/null | grep -q 'org.screensaver'
+    else
+        # KDE/KWin fallback via qdbus
+        local active_id
+        active_id=$(qdbus org.kde.KWin /KWin activeWindow 2>/dev/null)
+        [ -z "$active_id" ] && return 0
+        qdbus org.kde.KWin "/org/kde/KWin/Window/$active_id" resourceClass 2>/dev/null \
+            | grep -qi "screensaver"
+    fi
+}
+```
+
+On niri, `niri msg focused-window` is polled every second. When the focused window's app-id is no longer `org.screensaver`, the screensaver exits cleanly.
+
+## Customizing the ASCII logo
+
+The logo rendered by `tte` is read from `~/.config/screensaver/logo.txt`. Edit that file to display any ASCII art you want:
+
+```bash
+$EDITOR ~/.config/screensaver/logo.txt
+```
+
+The path is controlled by `$XDG_CONFIG_HOME` (defaults to `~/.config`).
+
+## Excluded effects
+
+The `dev_worm` effect is excluded by default because it can be visually distracting:
+
+```bash
+EXCLUDED_EFFECTS="dev_worm"
+```
+
+To exclude additional effects, add them as a comma-separated list in the script.
+
+## Keybind
+
+The screensaver is bound to `Mod+Alt+S` in niri in `keybinds.kdl`:
+
+```kdl
+Mod+ALT+S { spawn "screensaver"; }
+```
+
+## Automatic idle triggering with swayidle
+
+The screensaver package includes a `swayidle.service` systemd unit that triggers the screensaver and lock screen automatically on idle. The service is defined in `screensaver/.config/systemd/user/swayidle.service`:
+
+```ini
+[Service]
+ExecStart=/usr/bin/swayidle \
+    timeout 150  'vapn-launch-screensaver' \
+    timeout 300  'vapn-lock-screen' \
+    before-sleep 'vapn-lock-screen'
+Restart=on-failure
+```
+
+- After **150 seconds** of idle, `vapn-launch-screensaver` runs the screensaver (but only if the session is not already locked).
+- After **300 seconds** of idle, `vapn-lock-screen` engages the DMS lock screen.
+- On **suspend/sleep**, `vapn-lock-screen` runs immediately before the system sleeps.
+
+The `vapn-launch-screensaver` script checks `loginctl` first and exits early if the session is already locked, so the screensaver never opens over a locked screen.
+
+The `swayidle` package is installed with an `after_install` hook in `niri.toml` that registers it as a dependency of the niri session:
+
+```toml
+{ name = "swayidle", hooks = { after_install = [
+    "systemctl", "--user", "add-wants", "niri.service", "swayidle.service"
+] } }
+```
+
+<Note>
+`vapn-lock-screen` triggers the DMS lock screen (via `dms ipc call lock lock`). Use `restart-swayidle` in `~/.local/bin/` to reload the swayidle service after editing the idle timeouts.
+</Note>

@@ -1,0 +1,167 @@
+---
+title: "Niri keyboard shortcuts and keybindings"
+description: "Every keyboard shortcut in cfg/keybinds.kdl: applications, DMS panels, window focus and movement, workspace switching, layout controls, and screenshots."
+---
+
+All keybindings are defined in `cfg/keybinds.kdl`. **Mod** refers to the Super key (Windows/Command). The tables below cover every binding in the file, organized by category. Press `Mod+Shift+Escape` at any time to open niri's built-in hotkey overlay.
+
+## Applications
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+Return` | Open terminal (Ghostty) |
+| `Mod+Space` | Open app launcher (DMS Spotlight) |
+| `Mod+B` | Open browser (Helium) |
+| `Mod+E` | Open file manager (Nautilus) |
+
+## DMS panels
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+N` | Toggle notification center |
+| `Mod+V` | Toggle clipboard manager |
+| `Mod+Comma` | Focus or toggle settings panel |
+| `Mod+M` | Focus or toggle task manager (process list) |
+| `Mod+Shift+N` | Open DMS notepad |
+
+## Lock and power
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+Alt+L` | Lock screen |
+| `Mod+Shift+Q` | Toggle power menu |
+| `Mod+Shift+P` | Turn off monitors (useful for OLED displays or privacy) |
+| `Ctrl+Alt+Delete` | Quit niri |
+
+## Screensaver
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+Alt+S` | Launch screensaver |
+
+## Media controls
+
+These bindings remain active on the lock screen (`allow-when-locked=true`).
+
+| Keybinding | Action |
+|------------|--------|
+| `XF86AudioRaiseVolume` | Raise volume by 5% |
+| `XF86AudioLowerVolume` | Lower volume by 5% |
+| `XF86AudioMute` | Toggle mute |
+| `XF86AudioMicMute` | Toggle microphone mute |
+| `XF86AudioNext` | Next track |
+| `XF86AudioPrev` | Previous track |
+| `XF86AudioPlay` | Play/pause |
+| `XF86AudioPause` | Play/pause |
+
+## Brightness controls
+
+These bindings remain active on the lock screen.
+
+| Keybinding | Action |
+|------------|--------|
+| `XF86MonBrightnessUp` | Increase brightness by 5% |
+| `XF86MonBrightnessDown` | Decrease brightness by 5% |
+
+## Window focus
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+Left` / `Mod+H` | Focus column left |
+| `Mod+Right` / `Mod+L` | Focus column right |
+| `Mod+Up` / `Mod+K` | Focus window up (within column) |
+| `Mod+Down` / `Mod+J` | Focus window down (within column) |
+| `Mod+Home` | Focus first column |
+| `Mod+End` | Focus last column |
+| `Mod+Q` | Close focused window |
+
+## Window movement
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+Ctrl+Left` / `Mod+Ctrl+H` | Move column left |
+| `Mod+Ctrl+Right` / `Mod+Ctrl+L` | Move column right |
+| `Mod+Ctrl+Up` / `Mod+Ctrl+K` | Move window up (within column) |
+| `Mod+Ctrl+Down` / `Mod+Ctrl+J` | Move window down (within column) |
+| `Mod+Ctrl+Home` | Move column to first position |
+| `Mod+Ctrl+End` | Move column to last position |
+
+## Monitor focus and movement
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+Shift+Left` | Focus monitor left |
+| `Mod+Shift+Right` | Focus monitor right |
+| `Mod+Shift+Up` | Focus monitor up |
+| `Mod+Shift+Down` | Focus monitor down |
+| `Mod+Shift+Ctrl+Left` | Move column to monitor left |
+| `Mod+Shift+Ctrl+Right` | Move column to monitor right |
+| `Mod+Shift+Ctrl+Up` | Move column to monitor up |
+| `Mod+Shift+Ctrl+Down` | Move column to monitor down |
+
+## Workspace switching
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+1` – `Mod+9` | Switch to workspace 1–9 |
+| `Mod+Tab` | Switch to previous workspace |
+| `Mod+WheelScrollDown` | Focus workspace below (150 ms cooldown) |
+| `Mod+WheelScrollUp` | Focus workspace above (150 ms cooldown) |
+| `Mod+WheelScrollRight` | Focus column right |
+| `Mod+WheelScrollLeft` | Focus column left |
+| `Mod+Shift+WheelScrollDown` | Focus column right |
+| `Mod+Shift+WheelScrollUp` | Focus column left |
+
+## Moving columns to workspaces
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+Ctrl+1` – `Mod+Ctrl+9` | Move column to workspace 1–9 |
+| `Mod+Ctrl+WheelScrollDown` | Move column to workspace below |
+| `Mod+Ctrl+WheelScrollUp` | Move column to workspace above |
+| `Mod+Ctrl+WheelScrollRight` | Move column right |
+| `Mod+Ctrl+WheelScrollLeft` | Move column left |
+| `Mod+Ctrl+Shift+WheelScrollDown` | Move column right |
+| `Mod+Ctrl+Shift+WheelScrollUp` | Move column left |
+
+## Layout controls
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+Ctrl+F` | Expand column to available width |
+| `Mod+C` | Center focused column |
+| `Mod+Ctrl+C` | Center all visible columns |
+| `Mod+Minus` | Shrink column width by 10% |
+| `Mod+Equal` | Grow column width by 10% |
+| `Mod+Shift+Minus` | Shrink window height by 10% |
+| `Mod+Shift+Equal` | Grow window height by 10% |
+| `Mod+R` | Cycle through preset column widths (⅓, ½, ⅔) |
+
+## Window modes
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+T` | Toggle window floating |
+| `Mod+F` | Toggle fullscreen |
+| `Mod+W` | Toggle column tabbed display |
+| `Mod+O` | Toggle overview (no repeat) |
+
+## Screenshots
+
+Screenshots are handled via DMS IPC. These bindings require niri 25.11 or later.
+
+| Keybinding | Action |
+|------------|--------|
+| `Ctrl+Shift+1` | Screenshot (region select) |
+| `Ctrl+Shift+2` | Screenshot entire screen |
+| `Ctrl+Shift+3` | Screenshot focused window |
+
+## Emergency escape
+
+| Keybinding | Action |
+|------------|--------|
+| `Mod+Escape` | Toggle keyboard shortcuts inhibit (always works, even when inhibited) |
+
+<Tip>
+  Use `Mod+Escape` when a fullscreen application captures all keyboard input and you can't reach your other keybindings. Setting `allow-inhibiting=false` ensures this binding can never be blocked.
+</Tip>

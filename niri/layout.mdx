@@ -1,0 +1,209 @@
+---
+title: "Window layout and display configuration in niri"
+description: "How niri's layout works: gap size, preset column widths, window and layer rules, spring animation curves, input config, and cursor and misc settings."
+---
+
+Niri's visual behaviour is spread across four files: `cfg/layout.kdl` defines the core column grid, `cfg/rules.kdl` adds per-window and per-layer overrides, `cfg/animation.kdl` controls motion curves, and `cfg/misc.kdl` handles everything else — cursor, environment, and the DMS layer rule. Together they produce a clean, gap-separated tiling layout with transparent backgrounds so the DMS wallpaper renders beneath every column.
+
+## Layout (`cfg/layout.kdl`)
+
+```kdl
+layout {
+    gaps 16
+    center-focused-column "never"
+
+    background-color "transparent"
+
+    preset-column-widths {
+        proportion 0.33333
+        proportion 0.5
+        proportion 0.66667
+    }
+
+    struts {}
+}
+```
+
+### Gaps
+
+The `gaps 16` setting adds 16 logical pixels of space between every window column, as well as between columns and the edges of the screen.
+
+### Preset column widths
+
+Three preset widths are defined: one-third, one-half, and two-thirds of the screen width. You can adjust the width freely in 10% increments with `Mod+Minus` and `Mod+Equal`.
+
+| Preset | Proportion | Approximate share |
+|--------|-----------|------------------|
+| Narrow | `0.33333` | ⅓ of screen |
+| Medium | `0.5` | ½ of screen |
+| Wide | `0.66667` | ⅔ of screen |
+
+### Background color
+
+`background-color "transparent"` is required for noctalia-shell (DMS) to render its wallpaper behind the window columns. Without this setting, niri fills the background with a solid color and the wallpaper layer is hidden.
+
+### Center-focused column
+
+`center-focused-column "never"` keeps niri's auto-centering off. Columns stay at their natural scroll position unless you explicitly center them with `Mod+C` (focused column) or `Mod+Ctrl+C` (all visible columns).
+
+### Struts
+
+`struts {}` is present but empty, so niri does not reserve any edge space beyond what the DMS shell panels claim via layer-shell protocols.
+
+## Window and layer rules (`cfg/rules.kdl`)
+
+```kdl
+window-rule {
+    geometry-corner-radius 0
+    clip-to-geometry true
+}
+
+window-rule {
+    match app-id="org.screensaver"
+    open-fullscreen true
+}
+
+layer-rule {
+    match namespace="^noctalia-wallpaper*"
+    place-within-backdrop true
+}
+```
+
+The first `window-rule` applies to every window: corner radius is set to `0` (square corners) and `clip-to-geometry true` ensures content is clipped cleanly to the window boundary.
+
+The second rule matches the screensaver application (`app-id="org.screensaver"`) and forces it to open fullscreen immediately.
+
+The layer rule matches any layer-shell surface whose namespace starts with `noctalia-wallpaper` and places it within niri's backdrop layer, so it renders behind all windows.
+
+## DMS layer rule (`cfg/misc.kdl`)
+
+```kdl
+layer-rule {
+    match namespace="^quickshell$"
+    place-within-backdrop true
+}
+```
+
+This rule is defined separately in `cfg/misc.kdl` and targets the quickshell surface (the DMS shell itself). Placing it within the backdrop ensures DMS panel surfaces don't obscure unrelated windows and interact correctly with niri's focus model.
+
+## Animations (`cfg/animation.kdl`)
+
+Niri uses a mix of spring physics and easing curves depending on the animation type.
+
+```kdl
+animations {
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=1000 epsilon=0.0001
+    }
+    window-open {
+        duration-ms 200
+        curve "ease-out-quad"
+    }
+    window-close {
+        duration-ms 200
+        curve "ease-out-cubic"
+    }
+    horizontal-view-movement {
+        spring damping-ratio=1.0 stiffness=900 epsilon=0.0001
+    }
+    window-movement {
+        spring damping-ratio=1.0 stiffness=800 epsilon=0.0001
+    }
+    window-resize {
+        spring damping-ratio=1.0 stiffness=1000 epsilon=0.0001
+    }
+    config-notification-open-close {
+        spring damping-ratio=0.6 stiffness=1200 epsilon=0.001
+    }
+    screenshot-ui-open {
+        duration-ms 300
+        curve "ease-out-quad"
+    }
+    overview-open-close {
+        spring damping-ratio=1.0 stiffness=900 epsilon=0.0001
+    }
+}
+```
+
+| Animation | Type | Settings |
+|-----------|------|----------|
+| `workspace-switch` | Spring | damping 1.0, stiffness 1000 |
+| `window-open` | Easing | 200 ms, `ease-out-quad` |
+| `window-close` | Easing | 200 ms, `ease-out-cubic` |
+| `horizontal-view-movement` | Spring | damping 1.0, stiffness 900 |
+| `window-movement` | Spring | damping 1.0, stiffness 800 |
+| `window-resize` | Spring | damping 1.0, stiffness 1000 |
+| `config-notification-open-close` | Spring | damping 0.6, stiffness 1200 |
+| `screenshot-ui-open` | Easing | 300 ms, `ease-out-quad` |
+| `overview-open-close` | Spring | damping 1.0, stiffness 900 |
+
+A `damping-ratio` of `1.0` means critically damped — the animation reaches its target without oscillating. The config notification uses a lower damping ratio (`0.6`) so it has a slight bounce, making it easier to notice.
+
+## Input (`cfg/input.kdl`)
+
+```kdl
+input {
+    keyboard {
+        xkb {
+            layout "us, ru, ua"
+            options "grp:caps_toggle"
+        }
+        numlock
+    }
+
+    touchpad {
+        tap
+        accel-profile "adaptive"
+        click-method "clickfinger"
+        natural-scroll
+    }
+
+    mouse {
+        accel-profile "flat"
+    }
+
+    workspace-auto-back-and-forth
+}
+```
+
+The keyboard is configured with three XKB layouts — US, Russian, and Ukrainian — switchable via Caps Lock (`grp:caps_toggle`). Num Lock is enabled on startup.
+
+The touchpad uses tap-to-click, adaptive acceleration, clickfinger button emulation (two fingers for right-click, three for middle), and natural (inverted) scrolling.
+
+The mouse uses flat acceleration for consistent, 1:1 pointer movement.
+
+`workspace-auto-back-and-forth` means that pressing `Mod+1`–`Mod+9` when you're already on that workspace switches back to whichever workspace you came from, instead of doing nothing.
+
+## Cursor and misc settings (`cfg/misc.kdl`)
+
+```kdl
+prefer-no-csd
+screenshot-path null
+
+cursor {
+    hide-after-inactive-ms 5000
+}
+
+hotkey-overlay {
+    skip-at-startup
+}
+```
+
+- **`prefer-no-csd`** — tells niri to request server-side decorations from every window. Most apps under this config respect it, giving a consistent borderless look.
+- **`screenshot-path null`** — disables niri's built-in screenshot saving. Screenshots are handled by DMS IPC instead.
+- **`hide-after-inactive-ms 5000`** — hides the cursor after 5 seconds of inactivity.
+- **`skip-at-startup`** in `hotkey-overlay` — suppresses the keybinding hints overlay that niri normally shows on first launch.
+
+## DMS-specific layout overrides
+
+When DMS is installed, it can drop a `dms/layout.kdl` file into `~/.config/niri/`. Niri loads it automatically because of this line in `config.kdl`:
+
+```kdl
+include optional=true "dms/layout.kdl"
+```
+
+This file can override any layout setting — for example, adjusting gaps or column widths to match a specific screen resolution or DMS theme. You do not need to edit the base `cfg/layout.kdl` to make those changes.
+
+<Note>
+  If you want to make layout tweaks that survive DMS updates, add them to `cfg/layout.kdl` rather than `dms/layout.kdl`. DMS may regenerate its own override file and overwrite your changes there.
+</Note>

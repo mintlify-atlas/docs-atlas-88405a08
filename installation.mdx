@@ -1,0 +1,131 @@
+---
+title: "Install vapenyk dotfiles on CachyOS / Arch Linux"
+description: "Clone the repo, apply GNU Stow packages, set up the modular bashrc, and run pkg sync to install all declared packages on a fresh system."
+---
+
+These dotfiles use [GNU Stow](https://www.gnu.org/software/stow/) to symlink config files into your home directory and `pkg` to declare and install all system packages. The steps below take you from a bare CachyOS or Arch Linux install to a fully configured desktop.
+
+## Prerequisites
+
+- **CachyOS** (recommended) or stock **Arch Linux**
+- `git` and `stow` — installed in step 1 below
+- A regular user with `sudo` access
+
+<Note>
+On **CachyOS**, `paru` is available in the official repos and installs directly with `pacman`. On stock **Arch Linux**, `pkg` automatically falls back to building `paru` from the AUR using `makepkg` — no manual intervention required.
+</Note>
+
+## Installation steps
+
+<Steps>
+  <Step title="Install stow and git">
+    Use `paru` (or `pacman` on a fresh system before paru is available) to install the two required tools:
+
+    ```bash
+    paru -S stow git
+    ```
+  </Step>
+
+  <Step title="Clone the dotfiles repository">
+    Clone the repo into `~/dotfiles`:
+
+    ```bash
+    git clone https://github.com/vapenyk/dotfiles.git ~/dotfiles
+    ```
+  </Step>
+
+  <Step title="Enter the dotfiles directory">
+    ```bash
+    cd ~/dotfiles
+    ```
+  </Step>
+
+  <Step title="Stow the base package">
+    Apply the `base` stow package, which contains shell config, the ghostty terminal config, and wireplumber audio settings:
+
+    ```bash
+    stow --no-folding -R base
+    ```
+
+    The `--no-folding` flag ensures that stow creates individual symlinks rather than symlinking entire directories, so you can safely add files to those directories later.
+  </Step>
+
+  <Step title="Stow the pkg package">
+    Apply the `pkg` stow package to install the `pkg` binary and its TOML config files into `~/.local/bin` and `~/.config/pkg`:
+
+    ```bash
+    stow --no-folding -R pkg
+    ```
+  </Step>
+
+  <Step title="Set up the modular bashrc loader">
+    Run the installer script to append the `~/.bashrc.d` loader block to your `~/.bashrc` (and `~/.zshrc` if zsh is installed):
+
+    ```bash
+    ./scripts/install-bashrc-d.sh
+    ```
+
+    The script is idempotent — if the loader is already present, it skips without making changes.
+  </Step>
+
+  <Step title="Reload your shell">
+    Apply the new shell configuration without starting a new session:
+
+    ```bash
+    source ~/.bashrc
+    ```
+  </Step>
+
+  <Step title="Sync all packages">
+    Install every package declared in the `pkg` TOML config files. Missing backends (paru, flatpak, uv) are bootstrapped automatically:
+
+    ```bash
+    pkg sync
+    ```
+
+    You can preview what will be installed first with `pkg diff` before running sync.
+  </Step>
+</Steps>
+
+## Stow packages
+
+The repo is organized into four GNU Stow packages. Stow only the ones you need — `base` and `pkg` are required for the core setup.
+
+| Package | Contents |
+|---------|----------|
+| `base` | Shell config, ghostty terminal, wireplumber audio |
+| `niri` | Niri compositor config, DMS integration, GTK theme |
+| `pkg` | The `pkg` binary and its TOML config files |
+| `screensaver` | Terminal screensaver (`tte` + `foot` + `swayidle`) with niri integration |
+
+To apply additional packages:
+
+```bash
+stow --no-folding -R niri
+stow --no-folding -R screensaver
+```
+
+<Note>
+The `.stow-local-ignore` file in the repo root tells stow to skip `.git`, `scripts/`, `personal/`, and `README` files, so only the actual dotfiles are symlinked into your home directory.
+</Note>
+
+## What pkg sync does
+
+`pkg sync` reads all TOML files in `~/.config/pkg/packages/` and installs every declared package across all configured backends in priority order. It queries the live system before installing, so re-running it is always safe.
+
+<Tip>
+Run `pkg diff` before `pkg sync` to preview exactly which packages will be installed without making any changes.
+</Tip>
+
+<Warning>
+If you are on **stock Arch Linux** (not CachyOS) and paru is not yet installed, the first `pkg sync` will attempt to build paru from the AUR. This requires `base-devel` to be installed and takes a few minutes on the first run.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Updating" icon="arrow-up-circle" href="/updating">
+    Keep dotfiles and packages current with a single git pull
+  </Card>
+  <Card title="pkg overview" icon="box" href="/pkg/overview">
+    Learn how the declarative package manager works
+  </Card>
+</CardGroup>

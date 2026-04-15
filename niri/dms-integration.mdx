@@ -1,0 +1,170 @@
+---
+title: "DankMaterialShell (DMS) integration with niri"
+description: "How DankMaterialShell integrates with niri via optional KDL config includes, the dms ipc call protocol, systemd service hooks, and the quickshell layer rule."
+---
+
+DankMaterialShell (DMS) is a desktop shell built on [quickshell](https://quickshell.outfoxxed.me/), a QtQuick-based shell toolkit. Its implementation in this dotfiles setup is the `noctalia-qs` package. DMS provides the taskbar, notification center, app launcher, clipboard manager, settings panel, lock screen, power menu, and wallpaper engine that sit on top of niri. The two are connected through three mechanisms: optional KDL includes, a Unix IPC protocol, and systemd service hooks.
+
+## The optional include pattern
+
+`config.kdl` ends with eight `include optional=true` lines:
+
+```kdl
+include optional=true "dms/alttab.kdl"
+include optional=true "dms/binds.kdl"
+include optional=true "dms/colors.kdl"
+include optional=true "dms/cursor.kdl"
+include optional=true "dms/layout.kdl"
+include optional=true "dms/outputs.kdl"
+include optional=true "dms/windowrules.kdl"
+include optional=true "dms/wpblur.kdl"
+```
+
+When a file doesn't exist, niri silently skips it. When DMS is installed, it writes these files into `~/.config/niri/dms/` and they are picked up on the next niri restart. This means the base niri config works identically with or without DMS — no conditional logic required.
+
+| DMS override file | What it layers on |
+|-------------------|------------------|
+| `dms/alttab.kdl` | Alt-tab / window switcher integration |
+| `dms/binds.kdl` | Additional DMS-specific keybindings |
+| `dms/colors.kdl` | Dynamic accent colors matched to the wallpaper |
+| `dms/cursor.kdl` | Cursor theme and size |
+| `dms/layout.kdl` | Layout overrides (gaps, column widths, struts) |
+| `dms/outputs.kdl` | Monitor arrangement and resolution |
+| `dms/windowrules.kdl` | Additional window rules |
+| `dms/wpblur.kdl` | Wallpaper blur parameters |
+
+<Warning>
+  The `optional=true` flag is exclusive to **niri-git**. The stable `niri` package does not support it. Installing `niri` instead of `niri-git` causes config parse errors at startup.
+</Warning>
+
+## DMS IPC
+
+DMS exposes a Unix socket IPC that lets you control shell panels from keybindings or scripts. The general pattern is:
+
+```bash
+dms ipc call <panel> <action> [args...]
+```
+
+All DMS IPC calls in `cfg/keybinds.kdl` follow this pattern. Here is the full list:
+
+| Panel | Action | Effect |
+|-------|--------|--------|
+| `spotlight` | `toggle` | Open/close app launcher |
+| `lock` | `lock` | Lock the screen |
+| `powermenu` | `toggle` | Open/close power menu |
+| `notifications` | `toggle` | Open/close notification center |
+| `clipboard` | `toggle` | Open/close clipboard manager |
+| `settings` | `focusOrToggle` | Focus settings if open, otherwise open it |
+| `processlist` | `focusOrToggle` | Focus task manager if open, otherwise open it |
+| `notepad` | `open` | Open DMS notepad |
+| `audio` | `increment 5` | Raise volume by 5% |
+| `audio` | `decrement 5` | Lower volume by 5% |
+| `audio` | `mute` | Toggle mute |
+| `audio` | `micmute` | Toggle microphone mute |
+| `mpris` | `next` | Next media track |
+| `mpris` | `previous` | Previous media track |
+| `mpris` | `playPause` | Play or pause media |
+| `brightness` | `increment 5` | Raise display brightness by 5% |
+| `brightness` | `decrement 5` | Lower display brightness by 5% |
+| `niri` | `screenshot` | Take a region screenshot |
+| `niri` | `screenshotScreen` | Screenshot the whole screen |
+| `niri` | `screenshotWindow` | Screenshot the focused window |
+
+<Note>
+  The `niri` IPC panel for screenshots requires **niri 25.11 or later**.
+</Note>
+
+## Systemd service hooks
+
+The `pkg/.config/pkg/packages/niri.toml` file declares the packages and their post-install hooks. Two DMS packages register themselves as systemd wants/services so they start automatically with the niri session:
+
+<CodeGroup>
+
+```toml dms-shell-bin hook
+{ name = "dms-shell-bin", hooks = { after_install = [
+    "systemctl",
+    "--user",
+    "add-wants",
+    "niri.service",
+    "dms"
+] } }
+```
+
+```toml dsearch-bin hook
+{ name = "dsearch-bin", hooks = { after_install = [
+    "systemctl",
+    "--user",
+    "enable",
+    "--now",
+    "dsearch.service"
+] } }
+```
+
+</CodeGroup>
+
+- **`dms-shell-bin`** — the DMS shell itself. The hook adds it as a `Wants=` dependency of `niri.service`, so systemd starts DMS whenever niri starts.
+- **`dsearch-bin`** — a background indexing service used by the DMS app launcher. It is enabled and started immediately on install and runs persistently across sessions.
+
+Similarly, `swayidle` is wired in with the same `add-wants` pattern, providing idle detection for the lock screen.
+
+## Packages installed
+
+The full set of DMS and shell-related packages from `niri.toml`:
+
+| Package | Role |
+|---------|------|
+| `niri-git` | The compositor (niri-git required for `optional=true`) |
+| `noctalia-qs` | The DMS shell (quickshell-based) |
+| `dms-shell-bin` | DMS shell binary and systemd service |
+| `dsearch-bin` | Application search indexer for DMS launcher |
+| `cliphist` | Clipboard history backend used by DMS clipboard panel |
+| `swayidle` | Idle detection for automatic lock screen |
+| `matugen` | Material You color generation from wallpaper |
+| `qt6ct-kde` | Qt6 theme configuration used by `QT_QPA_PLATFORMTHEME_QT6` |
+
+## Debug flag for window activation
+
+DMS (being quickshell-based) activates windows using XDG activation tokens. Niri by default rejects tokens it considers invalid. The following debug flag in `cfg/misc.kdl` allows DMS to focus windows and trigger notification actions correctly:
+
+```kdl
+debug {
+    honor-xdg-activation-with-invalid-serial
+}
+```
+
+Without this flag, clicking a notification action or asking DMS to focus a specific window often fails silently.
+
+## Quickshell layer rule
+
+DMS renders its panels as layer-shell surfaces with the namespace `quickshell`. The layer rule in `cfg/misc.kdl` places them within niri's backdrop:
+
+```kdl
+layer-rule {
+    match namespace="^quickshell$"
+    place-within-backdrop true
+}
+```
+
+This ensures the DMS shell surfaces interact correctly with niri's focus and input handling rather than floating above everything as an opaque overlay.
+
+## Installation flow
+
+<Steps>
+  <Step title="Install niri-git and DMS packages">
+    Run `pkg sync` after stowing the dotfiles. The `pkg` tool reads `niri.toml` and installs all packages via `paru`, running the systemd hooks automatically.
+
+    ```bash
+    pkg sync
+    ```
+  </Step>
+  <Step title="Start a niri session">
+    Log in via SDDM. SDDM is enabled by `niri.toml`'s `after_install` hook (`sudo systemctl enable sddm`) during package installation. DMS starts automatically because of the `add-wants niri.service dms` hook.
+  </Step>
+  <Step title="DMS writes its config overrides">
+    On first launch, DMS generates its KDL override files into `~/.config/niri/dms/`. Restart niri (or reload its config) to pick them up.
+
+    ```bash
+    niri msg action reload-config
+    ```
+  </Step>
+</Steps>

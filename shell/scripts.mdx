@@ -1,0 +1,111 @@
+---
+title: "Setup scripts: bashrc loader and git config"
+description: "install-bashrc-d.sh appends a modular bashrc loader; install-config-git.sh sets up global Git config and SSH commit signing via rbw (Bitwarden CLI)."
+---
+
+The `scripts/` directory contains two one-shot setup scripts you run after cloning the dotfiles. They are idempotent — safe to re-run without causing duplicate configuration.
+
+## install-bashrc-d.sh
+
+This script appends a `~/.bashrc.d/` loader block to your shell rc files. It handles both bash and zsh automatically.
+
+### Usage
+
+```bash
+./scripts/install-bashrc-d.sh
+```
+
+### What it does
+
+<Steps>
+  <Step title="Detect your shell rc files">
+    The script targets `~/.bashrc` unconditionally. If `zsh` is found in `PATH`, it also targets `~/.zshrc`. It creates the file if it doesn't exist.
+  </Step>
+  <Step title="Check for existing loader">
+    Before appending, it searches for `.bashrc.d` in the target file. If found, it skips that file with a message — no duplicates.
+  </Step>
+  <Step title="Append the loader block">
+    It appends this POSIX-compatible block:
+
+    ```sh
+    # Load custom scripts from ~/.bashrc.d
+    if [ -d "$HOME/.bashrc.d" ]; then
+        for _rc in "$HOME"/.bashrc.d/*; do
+            [ -f "$_rc" ] && . "$_rc"
+        done
+        unset _rc
+    fi
+    ```
+  </Step>
+  <Step title="Reload your shell">
+    Run `source ~/.bashrc` or open a new terminal to activate the loader.
+  </Step>
+</Steps>
+
+<Note>
+This script is POSIX sh compatible (`sh`, not `bash`). It uses only `grep`, `cat`, and `printf` — no bashisms.
+</Note>
+
+---
+
+## install-config-git.sh
+
+An interactive script that configures global Git settings and sets up SSH commit signing using a key retrieved from [rbw](https://github.com/doy/rbw) (Bitwarden CLI).
+
+### Usage
+
+```bash
+./scripts/install-config-git.sh
+```
+
+### What it configures
+
+The script applies these global `~/.gitconfig` settings:
+
+| Setting | Value |
+|---------|-------|
+| `user.name` | Prompted interactively (prefilled from current config) |
+| `user.email` | Prompted interactively (prefilled from current config) |
+| `core.editor` | `$EDITOR` or `fresh` as fallback |
+| `init.defaultBranch` | `main` |
+| `gpg.format` | `ssh` |
+| `commit.gpgsign` | `true` |
+| `user.signingkey` | SSH public key fetched from Bitwarden via `rbw get signingkey` |
+| `gpg.ssh.allowedSignersFile` | `~/.ssh/allowed_signers` |
+
+### SSH signing setup
+
+The script fetches your SSH signing key from Bitwarden using `rbw`:
+
+```bash
+signing_key=$(rbw get signingkey 2>/dev/null || true)
+```
+
+It then writes the allowed signers file so Git can verify signatures locally:
+
+```bash
+echo "${git_email} ${signing_key}" > ~/.ssh/allowed_signers
+```
+
+<Warning>
+If `rbw get signingkey` returns nothing (Bitwarden vault is locked or the entry doesn't exist), the script warns you and continues. SSH signing will be configured but the key will be empty — you'll need to set `user.signingkey` manually afterward.
+</Warning>
+
+### Interactive flow
+
+The script shows a confirmation prompt before making any changes:
+
+```
+  name  : Your Name
+  email : you@example.com
+  editor: fresh
+  branch: main
+
+Apply these settings? [y/N]:
+```
+
+Enter `y` to apply. Any other input cancels without modifying `~/.gitconfig`.
+
+<Tip>
+You need `rbw` installed and your vault unlocked (`rbw unlock`) before running this script if you want SSH signing configured automatically.
+</Tip>

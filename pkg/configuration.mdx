@@ -1,0 +1,291 @@
+---
+title: "Configure pkg backends and package groups"
+description: "How to set up backends.toml and package group TOML files, including all fields, simple vs extended package entries, and environment variables."
+---
+
+All `pkg` configuration lives in plain TOML files under `~/.config/pkg/`. You can check this entire directory into version control alongside your dotfiles — there is nothing machine-specific in it.
+
+## File layout after `pkg init`
+
+```
+~/.config/pkg/
+├── backends.toml          ← backend definitions (pacman, paru, flatpak, uv)
+├── packages/              ← one file per group
+│   ├── base.toml
+│   └── flatpak.toml
+└── scripts/               ← lifecycle hook scripts
+    ├── before-sync.sh
+    ├── after-sync.sh
+    └── bootstrap-paru.sh
+
+~/.local/share/pkg/
+└── installed.db           ← SQLite, tracks what pkg itself installed
+```
+
+Both directories can be overridden via environment variables — see [Environment variables](#environment-variables) below.
+
+---
+
+## `backends.toml`
+
+Located at `~/.config/pkg/backends.toml`. Defines every package manager backend that `pkg` can use. The real config from this dotfiles repo:
+
+```toml
+# ~/.config/pkg/backends.toml
+
+[backends.pacman]
+description        = "Official Arch repos"
+check_cmd          = ["which", "pacman"]
+install_self       = []      # always present on Arch
+install_pkg        = ["sudo", "pacman", "-S", "--noconfirm", "--needed"]
+remove_pkg         = ["sudo", "pacman", "-Rns", "--noconfirm"]
+list_installed     = ["pacman", "-Qq"]
+list_strip_version = false
+
+[backends.paru]
+description          = "AUR helper (wraps pacman)"
+check_cmd            = ["which", "paru"]
+# On CachyOS, paru is in official repos — try that first:
+install_self_try     = ["sudo", "pacman", "-S", "--noconfirm", "--needed", "paru"]
+# On stock Arch, paru lives in AUR — build it with our bootstrap script:
+install_self_script  = "bootstrap-paru.sh"
+install_pkg          = ["paru", "-S", "--noconfirm", "--needed"]
+remove_pkg           = ["paru", "-Rns", "--noconfirm"]
+list_installed       = ["pacman", "-Qq"]
+list_strip_version   = false
+
+[backends.flatpak]
+description       = "Flatpak universal packages (Flathub)"
+check_cmd         = ["which", "flatpak"]
+install_self      = ["sudo", "pacman", "-S", "--noconfirm", "--needed", "flatpak"]
+# Add Flathub remote immediately after flatpak itself is installed:
+after_install_self = [
+  ["flatpak", "remote-add", "--if-not-exists", "flathub",
+   "https://dl.flathub.org/repo/flathub.flatpakrepo"],
+  ["sudo", "flatpak", "mask", "org.freedesktop.Platform.openh264"],
+]
+install_pkg        = ["flatpak", "install", "-y", "--noninteractive", "flathub"]
+remove_pkg         = ["flatpak", "uninstall", "-y", "--noninteractive"]
+list_installed     = ["flatpak", "list", "--app", "--columns=application"]
+list_strip_version = false
+
+[backends.uv]
+description        = "Python CLI tools via uv"
+check_cmd          = ["which", "uv"]
+install_self       = ["sudo", "pacman", "-S", "--noconfirm", "--needed", "uv"]
+install_pkg        = ["uv", "tool", "install"]
+remove_pkg         = ["uv", "tool", "uninstall"]
+list_installed     = ["uv", "tool", "list", "--quiet"]
+list_strip_version = true    # uv prints "package  version" per line
+```
+
+### Backend fields
+
+<ParamField path="description" type="string">
+  Human-readable label shown in `pkg status`. Optional but recommended.
+</ParamField>
+
+<ParamField path="check_cmd" type="list of strings">
+  Command that exits 0 if the backend binary is already installed. Omit or leave empty to skip the check — for example, `pacman` is always present on Arch so no check is needed.
+</ParamField>
+
+<ParamField path="install_self" type="list of strings">
+  Command to install the backend itself. Simple, no fallback. Use this for backends that are always available in official repos (e.g. flatpak, uv).
+</ParamField>
+
+<ParamField path="install_self_try" type="list of strings">
+  Try this command first. If it fails (non-zero exit), fall through to `install_self_script`. Useful when a tool is in official repos on some distros (CachyOS has paru) but needs AUR on others (stock Arch does not).
+</ParamField>
+
+<ParamField path="install_self_script" type="string">
+  Filename of a script in `scripts/` to run if `install_self_try` fails. Use this for AUR-only or complex installs. The file must exist in `~/.config/pkg/scripts/` and be executable.
+</ParamField>
+
+<ParamField path="after_install_self" type="list of lists">
+  Commands to run once immediately after the backend is successfully installed. Each element is a command array. The flatpak backend uses this to add the Flathub remote right after installation.
+</ParamField>
+
+<ParamField path="install_pkg" type="list of strings">
+  Command prefix for installing a package. The package name is appended automatically. For example, `["sudo", "pacman", "-S", "--noconfirm", "--needed"]` becomes `sudo pacman -S --noconfirm --needed git`.
+</ParamField>
+
+<ParamField path="remove_pkg" type="list of strings">
+  Command prefix for removing a package. The package name is appended automatically.
+</ParamField>
+
+<ParamField path="list_installed" type="list of strings">
+  Command that prints installed package names, one per line. Used by `sync` to detect what is already installed without relying on the database alone — this is how manually removed packages are detected and reinstalled.
+</ParamField>
+
+<ParamField path="list_strip_version" type="boolean" default="false">
+  Set to `true` if `list_installed` output is `"name version"` per line. `pkg` strips the version before comparing. Required for `uv tool list --quiet` which prints `terminaltexteffects 0.11.0`.
+</ParamField>
+
+### Bootstrap priority
+
+When a backend is missing, `pkg` tries strategies in this order:
+
+1. `install_self_try` — runs the command; on success, stops here
+2. `install_self_script` — runs `scripts/<filename>` (only if step 1 failed or was not configured)
+3. `install_self` — direct command with no fallback
+
+You can use `install_self_try` + `install_self_script` together (the recommended pattern for paru), or just `install_self` alone (simpler, for backends always available in official repos).
+
+---
+
+## Package group files
+
+Each file in `~/.config/pkg/packages/` defines one group. The filename stem becomes the group name — `niri.toml` becomes the `niri` group, `base_apps.toml` becomes `base_apps`.
+
+### `[group]` metadata
+
+```toml
+[group]
+display     = "Niri"
+description = "niri compositor, DMS shell, display tools"
+priority    = 30
+```
+
+<ParamField path="display" type="string" default="group name">
+  Human-readable label shown in `pkg groups` and `pkg status`. Defaults to the group's file stem if omitted.
+</ParamField>
+
+<ParamField path="description" type="string" default='""'>
+  Short description shown below the group name in `pkg groups` output.
+</ParamField>
+
+<ParamField path="priority" type="integer" default="50">
+  Install order — lower number means installed first. Groups with the same priority are sorted alphabetically. Set `base` to `10` so it runs before all other groups; set `flatpak` to `40` to run after system packages.
+</ParamField>
+
+### Backend sections
+
+Any section key other than `[group]` is treated as a backend name. The name must match a key in `backends.toml`. A group can have packages for multiple backends in the same file:
+
+```toml
+# ~/.config/pkg/packages/base.toml
+
+[group]
+display     = "Base"
+description = "CLI tools, shell utilities, fonts"
+priority    = 10
+
+[paru]
+packages = [
+  "fastfetch",
+  "btop",
+  "bat",
+  "neovim",
+  "fzf",
+  "ripgrep",
+  "fd",
+  "lazygit",
+  "zellij",
+  "starship",
+  "wl-clipboard",
+  "maplemono-nf-unhinted",
+]
+
+[uv]
+packages = [
+  "terminaltexteffects",
+]
+```
+
+---
+
+## Package entries
+
+Inside a backend section, each entry in `packages = [...]` can be either a plain string or an extended table with per-package hooks.
+
+### Simple form
+
+```toml
+[paru]
+packages = [
+  "fastfetch",
+  "btop",
+  "neovim",
+]
+```
+
+### Extended form
+
+Use a table with a `name` key and a `hooks` key when you need to run a command immediately after a specific package is installed:
+
+```toml
+[paru]
+packages = [
+  "fastfetch",
+  { name = "sddm", hooks = { after_install = [
+    "sudo", "systemctl", "enable", "sddm"
+  ] } },
+  { name = "swayidle", hooks = { after_install = [
+    "systemctl", "--user", "add-wants", "niri.service", "swayidle.service"
+  ] } },
+  { name = "dms-shell-bin", hooks = { after_install = [
+    "systemctl", "--user", "add-wants", "niri.service", "dms"
+  ] } },
+]
+```
+
+Both forms can be mixed freely in the same list.
+
+**Available per-package hook keys:**
+
+<ParamField path="before_install" type="list of strings">
+  Command to run immediately before the package is installed. Best-effort — a non-zero exit is logged but does not stop the sync.
+</ParamField>
+
+<ParamField path="after_install" type="list of strings">
+  Command to run immediately after the package is installed and recorded in the database. Best-effort. A common use is enabling a systemd service right after its package arrives.
+</ParamField>
+
+<Note>
+  Per-package hooks run only once, at install time. On subsequent `pkg sync` runs, if the package is already installed, neither hook fires again. For operations that should run on every sync (pulling dotfiles, stowing configs), use [hook scripts](/pkg/hooks) instead.
+</Note>
+
+---
+
+## Environment variables
+
+<ParamField path="PKG_CONFIG_DIR" type="string" default="~/.config/pkg">
+  Override the config directory. Useful for testing changes or maintaining multiple profiles (e.g. a minimal install vs. a full workstation setup).
+</ParamField>
+
+<ParamField path="PKG_DATA_DIR" type="string" default="~/.local/share/pkg">
+  Override the data directory where the SQLite database lives.
+</ParamField>
+
+```bash
+# Use a separate profile for a minimal install
+PKG_CONFIG_DIR=~/.config/pkg-minimal pkg sync
+```
+
+---
+
+## SQLite database
+
+`pkg` maintains a SQLite database at `~/.local/share/pkg/installed.db`. This is the source of truth for `prune` — it is how `pkg` knows which packages it installed versus which were installed manually.
+
+**Schema:**
+
+```sql
+CREATE TABLE installed (
+    backend      TEXT NOT NULL,
+    package      TEXT NOT NULL,
+    group_name   TEXT NOT NULL DEFAULT '',
+    installed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (backend, package)
+);
+```
+
+The database is created and migrated automatically on every `pkg` invocation — you never need to manage it manually. You can inspect it directly with any SQLite client:
+
+```bash
+sqlite3 ~/.local/share/pkg/installed.db \
+  "SELECT backend, package, group_name, installed_at
+   FROM installed
+   ORDER BY installed_at DESC
+   LIMIT 20;"
+```

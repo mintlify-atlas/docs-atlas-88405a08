@@ -1,0 +1,117 @@
+---
+title: "pkg: declarative package manager for Arch Linux"
+description: "pkg is a single-file Python tool that keeps your Arch Linux packages in sync across pacman, paru, flatpak, and uv using plain TOML config files."
+---
+
+`pkg` is a single Python file that reads TOML configuration and makes your system match what you declared — installing missing packages, bootstrapping backends that are not yet installed, and running lifecycle hook scripts on every sync. Instead of running `pacman`, `paru`, `flatpak`, and `uv` by hand, you describe your entire system in version-controlled TOML files and let `pkg` handle the rest.
+
+## Why pkg exists
+
+Most Arch users juggle packages from several sources simultaneously: official repos via pacman, the AUR via paru, sandboxed GUI apps via flatpak, and Python CLI tools via uv. `pkg` treats all of these as interchangeable _backends_ and lets you express your entire package state as plain text files alongside your dotfiles.
+
+**Key properties:**
+
+- **Declarative** — your TOML files are the source of truth; `pkg sync` makes the live system match them.
+- **Idempotent** — running `pkg sync` twice is safe; already-installed packages are detected via live system queries, not only from the database.
+- **Safe prune** — `pkg prune` only touches packages that `pkg` itself installed; anything you installed manually is never removed.
+- **Smart bootstrap** — missing backends (paru, flatpak, uv) are installed automatically before `pkg` tries to use them.
+- **Self-contained** — the entire tool is a single Python file with no third-party dependencies beyond `tomllib`, which is built into Python 3.11+.
+
+**Requires:** Python 3.11+ · **Platform:** Arch Linux
+
+## Supported backends
+
+| Backend | Description |
+|---------|-------------|
+| `pacman` | Official Arch Linux repos — always present, no bootstrap needed |
+| `paru` | AUR helper that wraps pacman — bootstrapped from official repos or built from AUR |
+| `flatpak` | Sandboxed GUI apps from Flathub — bootstrapped via pacman, Flathub remote added automatically |
+| `uv` | Python CLI tools installed as isolated tools — bootstrapped via pacman |
+
+## Quick start
+
+```bash
+# 1. Install pkg
+install -Dm755 pkg ~/.local/bin/pkg
+
+# 2. Generate default config files
+pkg init
+
+# 3. Review and edit what gets installed
+$EDITOR ~/.config/pkg/packages/base.toml
+
+# 4. Preview what will happen (read-only, no changes)
+pkg diff
+
+# 5. Install everything
+pkg sync
+```
+
+On subsequent runs, `pkg sync` is safe to re-run at any time — it detects what is already installed and skips those packages.
+
+## A real package group
+
+The `base.toml` group from this dotfiles repo shows what a real group file looks like. It uses three backends in one file — `paru` for AUR packages and `uv` for Python CLI tools:
+
+```toml
+# ~/.config/pkg/packages/base.toml
+
+[group]
+display     = "Base"
+description = "CLI tools, shell utilities, fonts"
+priority    = 10
+
+[paru]
+packages = [
+  "base-devel",
+  "fastfetch",
+  "btop",
+  "bat",
+  "starship",
+  "rbw",
+  "zellij",
+  "lazygit",
+  "neovim",
+  "fzf",
+  "ripgrep",
+  "fd",
+  "mise",
+  "nano",
+  "nano-syntax-highlighting",
+  "openssh",
+  "rsync",
+  "wget",
+  "curl",
+  "wl-clipboard",
+  # AUR
+  "maplemono-nf-unhinted",
+]
+
+[uv]
+packages = [
+  "terminaltexteffects",
+]
+```
+
+The `priority = 10` ensures this group is installed before all others — so tools like `uv` are available when later groups need them.
+
+<Note>
+  The `paru` backend uses `pacman -Qq` as its `list_installed` command, so packages installed by either `pacman` or `paru` are correctly detected as already present. You will not see duplicate installs.
+</Note>
+
+## Explore the docs
+
+<CardGroup cols={2}>
+  <Card title="Commands" icon="terminal" href="/pkg/commands">
+    Complete reference for all pkg commands and their flags
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/pkg/configuration">
+    How to configure backends.toml and package group files
+  </Card>
+  <Card title="Hooks" icon="webhook" href="/pkg/hooks">
+    Lifecycle hook scripts and per-package hooks
+  </Card>
+  <Card title="Workflows" icon="arrows-rotate" href="/pkg/workflows">
+    Common patterns: fresh installs, adding packages, pruning
+  </Card>
+</CardGroup>

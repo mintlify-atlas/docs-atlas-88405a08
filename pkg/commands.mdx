@@ -1,0 +1,274 @@
+---
+title: "pkg commands: init, sync, diff, prune, and more"
+description: "Complete reference for all pkg commands and flags: init, sync, diff, prune, groups, status, and list with real terminal output examples."
+---
+
+`pkg` exposes seven commands. Three of them (`sync`, `diff`, `prune`) share the same group-filtering flags so you can scope any operation to a subset of your config. The remaining commands are read-only inspection tools.
+
+## `pkg init`
+
+Creates the default config files and example hook scripts under `~/.config/pkg/`. Safe to re-run — existing files are skipped unless you pass `--force`.
+
+```bash
+pkg init           # create default files, skip existing
+pkg init --force   # overwrite everything
+```
+
+**What gets created:**
+
+- `~/.config/pkg/backends.toml` — four pre-configured backends (pacman, paru, flatpak, uv)
+- `~/.config/pkg/packages/base.toml` — example base packages group
+- `~/.config/pkg/packages/flatpak.toml` — example Flatpak apps group
+- `~/.config/pkg/scripts/before-sync.sh` — example pre-sync hook
+- `~/.config/pkg/scripts/after-sync.sh` — example post-sync hook
+- `~/.config/pkg/scripts/bootstrap-paru.sh` — AUR bootstrap script for paru
+- `~/.local/share/pkg/installed.db` — empty SQLite database
+
+<ParamField path="--force" type="flag">
+  Overwrite existing config files. Without this flag, `pkg init` skips files that already exist, so it is safe to run on an existing install to add new default files without clobbering your customizations.
+</ParamField>
+
+---
+
+## `pkg sync`
+
+The main command. Installs all packages defined in your `packages/*.toml` files. Groups are processed in priority order (lowest number first).
+
+```bash
+pkg sync                          # install everything
+pkg sync base wayland             # only these groups
+pkg sync --exclude apps flatpak   # all groups except these
+pkg sync base --exclude tools     # combine: base group, skipping tools
+pkg sync --skip-errors            # continue past individual install failures
+pkg sync --strict-hooks           # abort if any hook script fails
+```
+
+**What sync does, step by step:**
+
+1. Runs `before-sync.sh` hook (if it exists and is executable)
+2. Checks which backends are needed and bootstraps any that are missing
+3. Runs `before-{backend}.sh` once for each backend that has packages to install
+4. For each group in priority order, for each backend:
+   - Queries the live system for currently installed packages
+   - Runs any per-package `before_install` hooks
+   - Installs anything missing and records each install in the database
+   - Runs any per-package `after_install` hooks
+5. Runs `after-{backend}.sh` once for each backend, after all groups are processed
+6. Runs `after-sync.sh` hook
+7. Prints a summary: N installed, M already up to date
+
+<Note>
+  `before-{backend}.sh` and `after-{backend}.sh` each fire **once per backend per sync**, regardless of how many groups use that backend. If three groups all use `paru`, `before-paru.sh` runs once before all of them.
+</Note>
+
+<ParamField path="GROUP ..." type="positional">
+  Process only the named groups. Omit to process all groups. Group names are the file stems of your `packages/*.toml` files (e.g. `base`, `niri`, `flatpak`). Use `pkg groups` to see what's available.
+</ParamField>
+
+<ParamField path="--exclude GROUP" type="flag">
+  Skip the named group. Accepts multiple values: `--exclude apps flatpak`. Can be combined with positional group names.
+</ParamField>
+
+<ParamField path="-x GROUP" type="flag">
+  Short alias for `--exclude`.
+</ParamField>
+
+<ParamField path="--skip-errors" type="flag">
+  On install failure, log the error and continue to the next package. Without this flag, `pkg sync` aborts on the first install failure. Useful when syncing a fresh system where some AUR packages might temporarily fail to build.
+</ParamField>
+
+<ParamField path="--strict-hooks" type="flag">
+  Abort the entire sync if any hook script exits non-zero. By default, a failing hook prints a warning and continues.
+</ParamField>
+
+---
+
+## `pkg diff`
+
+Read-only preview of what `sync` would do. Compares your TOML config against the database. Makes no changes to your system.
+
+```bash
+pkg diff                   # diff everything
+pkg diff wayland           # diff a specific group
+pkg diff --exclude flatpak # diff all except one group
+```
+
+**Example output:**
+
+```
+Package diff
+
+  Will install:
+  + [paru] niri-git
+  + [paru] waybar
+  + [flatpak] md.obsidian.Obsidian
+
+  Not in config anymore (run prune to remove):
+  - [pacman] some-old-package
+```
+
+The "not in config anymore" section only appears when you are not filtering by group, to avoid false positives when looking at a subset of your config.
+
+<ParamField path="GROUP ..." type="positional">
+  Diff only the named groups. Omit to diff all groups.
+</ParamField>
+
+<ParamField path="--exclude GROUP" type="flag">
+  Skip the named group when diffing.
+</ParamField>
+
+---
+
+## `pkg prune`
+
+Finds packages that `pkg` installed (tracked in the database) which no longer appear in your config. Asks interactively before removing each one.
+
+```bash
+pkg prune                  # check all groups
+pkg prune base             # only look for orphans in the base group
+pkg prune --exclude dev    # check everything except dev group
+```
+
+**Example interactive session:**
+
+```
+Prune — packages removed from config
+
+  2 package(s) installed by pkg but no longer in config:
+
+  - [pacman] some-old-package
+  - [flatpak] io.example.OldApp
+
+  Remove [pacman] some-old-package? [y/N] y
+  ✓ [pacman] some-old-package removed
+  Remove [flatpak] io.example.OldApp? [y/N] n
+  → Skipping io.example.OldApp
+
+✓ Pruned 1 package(s), skipped 1.
+```
+
+<Warning>
+  If the backend for a package is no longer defined in `backends.toml`, `prune` removes it from the database only — it cannot uninstall the package but will warn you so you can do it manually.
+</Warning>
+
+<ParamField path="GROUP ..." type="positional">
+  Limit the orphan search to packages belonging to the named groups.
+</ParamField>
+
+<ParamField path="--exclude GROUP" type="flag">
+  Skip the named group when looking for orphans.
+</ParamField>
+
+---
+
+## `pkg groups`
+
+Lists all available package groups from `packages/*.toml`, sorted by priority.
+
+```bash
+pkg groups
+```
+
+**Example output:**
+
+```
+Available groups
+──────────────────────────────────────────
+
+  base  priority=10  28 packages  [paru, uv]
+    CLI tools, shell utilities, fonts
+
+  base_apps  priority=20  7 packages  [paru]
+    GUI apps: terminal, editor, browser, archive manager
+
+  niri  priority=30  30 packages  [paru]
+    niri compositor, DMS shell, display tools
+
+  flatpak  priority=40  11 packages  [flatpak]
+    GUI apps from Flathub
+
+  kde  priority=50  4 packages  [paru]
+    KDE Plasma extras
+```
+
+---
+
+## `pkg status`
+
+Gives an overview of the entire system: backend health, package install progress per group, hook scripts, and all relevant paths.
+
+```bash
+pkg status
+```
+
+**Example output:**
+
+```
+Backends
+──────────────────────────────────────────
+  [pacman]                       ✓ available   Official Arch repos
+  [paru]                         ✓ available   AUR helper (wraps pacman)  (smart bootstrap)
+  [flatpak]                      ✗ missing     Flatpak universal packages
+  [uv]                           ✓ available   Python CLI tools via uv
+
+Package groups
+──────────────────────────────────────────
+  base                 28/28  installed  priority=10
+  flatpak              0/11   installed  priority=40  GUI apps from Flathub
+
+Hook scripts
+──────────────────────────────────────────
+  after-sync.sh                       ✓
+  before-sync.sh                      ✓
+  bootstrap-paru.sh                   ✓
+
+Paths
+──────────────────────────────────────────
+  Config:   /home/user/.config/pkg
+  Packages: /home/user/.config/pkg/packages
+  Scripts:  /home/user/.config/pkg/scripts
+  Database: /home/user/.local/share/pkg/installed.db
+```
+
+Backends marked with `(smart bootstrap)` have `install_self_try` or `install_self_script` configured and will be installed automatically when needed. Hook scripts marked with `✗ not executable` exist on disk but need `chmod +x` before they will run.
+
+---
+
+## `pkg list`
+
+Lists all packages tracked in the database, grouped by backend.
+
+```bash
+pkg list
+```
+
+**Example output:**
+
+```
+Installed packages (from database)
+──────────────────────────────────────────
+
+  paru  (24)
+    • bat
+    • btop
+    • fastfetch
+    • fzf
+    • lazygit
+    • neovim
+    ...
+
+  flatpak  (11)
+    • io.anytype.anytype
+    • md.obsidian.Obsidian
+    • org.telegram.desktop
+    ...
+
+  uv  (1)
+    • terminaltexteffects
+
+  Total: 36 packages across 3 backends
+```
+
+<Tip>
+  `pkg list` shows only what `pkg` itself installed. Packages you installed manually outside of `pkg` will not appear here — that is by design, and is what makes `pkg prune` safe.
+</Tip>

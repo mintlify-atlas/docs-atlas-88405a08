@@ -1,0 +1,81 @@
+{
+  "projectType": "general",
+  "projectName": "vapenyk dotfiles",
+  "projectDescription": "A declarative, stow-based dotfiles setup for CachyOS/Arch Linux featuring the niri Wayland compositor, DMS shell, a custom package manager wrapper (pkg), and a terminal screensaver.",
+  "theme": "aspen",
+  "primaryColor": "#7C6AF7",
+  "lightColor": "#EDE9FD",
+  "darkColor": "#1E1B2E",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "updating"
+            ]
+          },
+          {
+            "group": "pkg — Package Manager",
+            "pages": [
+              "pkg/overview",
+              "pkg/commands",
+              "pkg/configuration",
+              "pkg/hooks",
+              "pkg/workflows"
+            ]
+          },
+          {
+            "group": "Niri & DMS",
+            "pages": [
+              "niri/overview",
+              "niri/keybindings",
+              "niri/layout",
+              "niri/dms-integration"
+            ]
+          },
+          {
+            "group": "Shell & Tools",
+            "pages": [
+              "shell/bash-setup",
+              "shell/screensaver",
+              "shell/scripts"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "GNU Stow-based dotfile symlink management across multiple profiles (base, niri, pkg, screensaver)",
+    "pkg: single-file declarative package manager wrapping pacman, paru, flatpak, and uv with TOML config",
+    "Niri tiling Wayland compositor with modular KDL config split across animation, input, keybinds, layout, rules",
+    "DMS (DankMaterialShell) integration for app launcher, clipboard, notifications, power menu, and lock screen",
+    "Terminal screensaver using terminaltexteffects (tte) with dynamic refresh-rate detection and focus-aware exit",
+    "Automatic backend bootstrapping — paru is installed via pacman on CachyOS or built from AUR on stock Arch",
+    "Lifecycle hooks (before-sync, after-sync, before/after-{backend}) run on every pkg sync",
+    "Modular bashrc via ~/.bashrc.d/ with starship prompt, mise runtime manager, fzf integrations, and rbw SSH agent"
+  ],
+  "publicApiSurface": [
+    "pkg init [--force]",
+    "pkg sync [GROUP ...] [--exclude GROUP] [--skip-errors] [--strict-hooks]",
+    "pkg diff [GROUP ...] [--exclude GROUP]",
+    "pkg prune [GROUP ...] [--exclude GROUP]",
+    "pkg groups",
+    "pkg status",
+    "pkg list",
+    "stow --no-folding -R base",
+    "stow --no-folding -R pkg",
+    "stow --no-folding -R niri",
+    "stow --no-folding -R screensaver",
+    "scripts/install-bashrc-d.sh",
+    "scripts/install-config-git.sh",
+    "screensaver (binary — launches terminal screensaver via foot)",
+    "~/.config/pkg/backends.toml (backend definitions)",
+    "~/.config/pkg/packages/*.toml (package group files)"
+  ]
+}
